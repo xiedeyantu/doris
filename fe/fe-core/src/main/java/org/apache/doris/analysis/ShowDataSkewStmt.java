@@ -31,12 +31,21 @@ import org.apache.doris.qe.ShowResultSetMetaData;
 
 import com.google.common.collect.ImmutableList;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
 // show data skew from tbl [partition(p1, p2, ...)]
 public class ShowDataSkewStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
+    public static final List<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BucketIdx").add("AvgRowCount").add("AvgDataSize")
             .add("Graph").add("Percent")
             .build();
+
+    static {
+        List<String> TITLE_NAMES_WITH_PARTITION = ImmutableList.of("Partition");
+        TITLE_NAMES_WITH_PARTITION.addAll(TITLE_NAMES);
+    }
 
     private TableRef tblRef;
 
