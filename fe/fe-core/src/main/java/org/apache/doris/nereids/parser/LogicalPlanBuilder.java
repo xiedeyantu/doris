@@ -623,7 +623,6 @@ import org.apache.doris.nereids.trees.plans.commands.ShowProcedureStatusCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowProcessListCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowQueryProfileCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowQueuedAnalyzeJobsCommand;
-import org.apache.doris.nereids.trees.plans.commands.ShowQueuedAnalyzeJobsCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowReplicaDistributionCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowRepositoriesCommand;
 import org.apache.doris.nereids.trees.plans.commands.ShowRolesCommand;
@@ -5733,49 +5732,42 @@ public class LogicalPlanBuilder extends DorisParserBaseVisitor<Object> {
 
     @Override
     public LogicalPlan visitDescribeTable(DorisParser.DescribeTableContext ctx) {
-        String tableName = null;
-        if (ctx.multipartIdentifier() != null) {
-            List<String> nameParts = visitMultipartIdentifier(ctx.multipartIdentifier());
-            tableName = nameParts.get(0); // only one entry possible
+        TableNameInfo tableName = new TableNameInfo(visitMultipartIdentifier(ctx.multipartIdentifier()));
+        PartitionNamesInfo partitionNames = null;
+        boolean isTempPart = false;
+        if (ctx.specifiedPartition() != null) {
+            isTempPart = ctx.specifiedPartition().TEMPORARY() != null;
+            if (ctx.specifiedPartition().identifier() != null) {
+                partitionNames = new PartitionNamesInfo(isTempPart,
+                        ImmutableList.of(ctx.specifiedPartition().identifier().getText()));
+            } else {
+                partitionNames = new PartitionNamesInfo(isTempPart,
+                        visitIdentifierList(ctx.specifiedPartition().identifierList()));
+            }
         }
-        return new DescribeCommand(tableName, false);
+        return new DescribeCommand(tableName, false, partitionNames);
     }
 
     @Override
     public LogicalPlan visitDescribeTableAll(DorisParser.DescribeTableAllContext ctx) {
-        String tableName = null;
-        if (ctx.multipartIdentifier() != null) {
-            List<String> nameParts = visitMultipartIdentifier(ctx.multipartIdentifier());
-            tableName = nameParts.get(0); // only one entry possible
-        }
-        return new DescribeCommand(tableName, true);
+        TableNameInfo tableName = new TableNameInfo(visitMultipartIdentifier(ctx.multipartIdentifier()));
+        return new DescribeCommand(tableName, true, null);
     }
 
     @Override
-    public List<String> visitTableAlias(DorisParser.TableAliasContext ctx) {
+    public String visitTableAlias(DorisParser.TableAliasContext ctx) {
         if (ctx.identifierList() != null) {
-            return visitIdentifierList(ctx.identifierList());
+            throw new ParseException("Do not implemented", ctx);
         }
-        return new ArrayList<>();
+        return ctx.strictIdentifier() != null ? ctx.strictIdentifier().getText() : null;
     }
 
     @Override
     public LogicalPlan visitDescribeTableValuedFunction(DorisParser.DescribeTableValuedFunctionContext ctx) {
-        String tvfName = null;
-        if (ctx.tvfName != null) {
-            tvfName = ctx.tvfName.getText();
-        }
-        String alias = null;
-        if (ctx.tableAlias() != null) {
-            List<String> aliasParts = visitTableAlias(ctx.tableAlias());
-            if (!aliasParts.isEmpty()) {
-                alias = aliasParts.get(0);
-            }
-        }
-        Map<String, String> params = new HashMap<>();
-        if (ctx.propertyItemList() != null) {
-            params = visitPropertyItemList(ctx.propertyItemList());
-        }
+        String tvfName = ctx.tvfName.getText();
+        String alias = visitTableAlias(ctx.tableAlias());
+        Map<String, String> params = visitPropertyItemList(ctx.properties);
+
         TableValuedFunctionRef tableValuedFunctionRef = null;
         try {
             tableValuedFunctionRef = new TableValuedFunctionRef(tvfName, alias, params);

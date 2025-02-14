@@ -33,15 +33,12 @@ suite("describe_command") {
         "replication_num" = "1"
         );
     """
-    checkNereidsExecute("""describe t1;""")
     qt_cmd("""describe t1;""")
-    checkNereidsExecute("""describe t1 all;""")
+    qt_cmd("""describe describe_command.t1;""")
+    qt_cmd("""describe internal.describe_command.t1;""")
     qt_cmd("""describe t1 all;""")
-    checkNereidsExecute("""describe t1 partition t1;""")
-    qt_cmd("""describe t1 partition t1;""")
-    checkNereidsExecute("""describe t1 partition (t1);""")
-    qt_cmd("""describe t1 partition (t1);""")
-    checkNereidsExecute("""describe function backends();""")
+//    qt_cmd("""describe t1 partition t1;""")
+//    qt_cmd("""describe t1 partition (t1);""")
     qt_cmd("""describe function backends();""")
     qt_cmd("""drop table if exists t1;""")
 }

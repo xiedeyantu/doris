@@ -18,8 +18,6 @@
 package org.apache.doris.nereids.trees.plans.commands;
 
 import org.apache.doris.analysis.Expr;
-import org.apache.doris.analysis.PartitionNames;
-import org.apache.doris.analysis.TableName;
 import org.apache.doris.analysis.TableValuedFunctionRef;
 import org.apache.doris.catalog.Column;
 import org.apache.doris.catalog.DatabaseIf;
@@ -44,11 +42,15 @@ import org.apache.doris.common.util.Util;
 import org.apache.doris.datasource.CatalogIf;
 import org.apache.doris.mysql.privilege.PrivPredicate;
 import org.apache.doris.nereids.trees.plans.PlanType;
+import org.apache.doris.nereids.trees.plans.commands.info.PartitionNamesInfo;
+import org.apache.doris.nereids.trees.plans.commands.info.TableNameInfo;
 import org.apache.doris.nereids.trees.plans.visitor.PlanVisitor;
 import org.apache.doris.qe.ConnectContext;
 import org.apache.doris.qe.ShowResultSet;
 import org.apache.doris.qe.ShowResultSetMetaData;
 import org.apache.doris.qe.StmtExecutor;
+import org.apache.doris.tablefunction.BackendsTableValuedFunction;
+import org.apache.doris.tablefunction.LocalTableValuedFunction;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -73,14 +75,14 @@ import java.util.Set;
  *   describe tbl partition (p1, p2)
  *   describe function tvf
  */
-public class DescribeCommand extends Command implements ForwardWithSync {
+public class DescribeCommand extends ShowCommand {
     private static final Logger LOG = LogManager.getLogger(DescribeCommand.class);
 
-    private String tableName;
+    private TableNameInfo dbTableName;
     private boolean isAllTables = false;
     private boolean isOlapTable = false;
 
-    private PartitionNames partitionNames;
+    private PartitionNamesInfo partitionNames;
 
     private TableValuedFunctionRef tableValuedFunctionRef;
     private boolean isTableValuedFunction;
@@ -88,15 +90,9 @@ public class DescribeCommand extends Command implements ForwardWithSync {
     private List<List<String>> rows = new LinkedList<List<String>>();
     private ProcNodeInterface node;
 
-    public DescribeCommand(String tableName, boolean isAllTables) {
+    public DescribeCommand(TableNameInfo dbTableName, boolean isAllTables, PartitionNamesInfo partitionNames) {
         super(PlanType.DESCRIBE);
-        this.tableName = tableName;
-        this.isAllTables = isAllTables;
-    }
-
-    public DescribeCommand(String tableName, boolean isAllTables, PartitionNames partitionNames) {
-        super(PlanType.DESCRIBE);
-        this.tableName = tableName;
+        this.dbTableName = dbTableName;
         this.isAllTables = isAllTables;
         this.partitionNames = partitionNames;
     }
@@ -161,17 +157,34 @@ public class DescribeCommand extends Command implements ForwardWithSync {
         }
     }
 
+    /**
+     * validateTableValuedFunction
+     */
+    public void validateTableValuedFunction(ConnectContext ctx, String funcName) throws AnalysisException {
+        // check privilige for backends/local tvf
+        if (funcName.equalsIgnoreCase(BackendsTableValuedFunction.NAME)
+                || funcName.equalsIgnoreCase(LocalTableValuedFunction.NAME)) {
+            if (!Env.getCurrentEnv().getAccessManager().checkGlobalPriv(ctx, PrivPredicate.ADMIN)
+                    && !Env.getCurrentEnv().getAccessManager().checkGlobalPriv(ctx,
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+        }
+    }
+
     @Override
-    public void run(ConnectContext ctx, StmtExecutor executor) throws Exception {
+    public ShowResultSet doRun(ConnectContext ctx, StmtExecutor executor) throws Exception {
         CatalogIf catalog = ctx.getCurrentCatalog();
         String dbName = ctx.getDatabase();
-        ShowResultSet resultSet = null;
 
-        if (tableName != null && !tableName.isEmpty()) {
-            Pair<String, String> sourceTableNameWithMetaName = catalog.getSourceTableNameWithMetaTableName(tableName);
+        if (dbTableName != null) {
+            dbTableName.analyze(ctx);
+            Pair<String, String> sourceTableNameWithMetaName = catalog.getSourceTableNameWithMetaTableName(
+                    dbTableName.getCtl());
             if (!Strings.isNullOrEmpty(sourceTableNameWithMetaName.second)) {
                 isTableValuedFunction = true;
-                Optional<TableValuedFunctionRef> optTvfRef = catalog.getMetaTableFunctionRef(dbName, tableName);
+                Optional<TableValuedFunctionRef> optTvfRef = catalog.getMetaTableFunctionRef(dbName,
+                        dbTableName.getTbl());
                 if (!optTvfRef.isPresent()) {
                     throw new AnalysisException("meta table not found: " + sourceTableNameWithMetaName.second);
                 }
@@ -180,6 +193,7 @@ public class DescribeCommand extends Command implements ForwardWithSync {
         }
 
         if (!isAllTables && isTableValuedFunction) {
+            validateTableValuedFunction(ctx, tableValuedFunctionRef.getTableFunction().getTableName());
             List<Column> columns = tableValuedFunctionRef.getTableFunction().getTableColumns();
             for (Column column : columns) {
                 List<String> row = Arrays.asList(
@@ -192,20 +206,22 @@ public class DescribeCommand extends Command implements ForwardWithSync {
                         "NONE");
                 rows.add(row);
             }
-            resultSet = new ShowResultSet(getMetaData(), rows);
-            executor.sendResultSet(resultSet);
-            return;
+            return new ShowResultSet(getMetaData(), rows);
         }
 
         if (partitionNames != null) {
+            partitionNames.validate(ctx);
             if (partitionNames.isTemp()) {
                 throw new AnalysisException("Do not support temp partitions");
             }
         }
 
-        TableName dbTableName = new TableName(catalog.getName(), dbName, tableName);
         if (!Env.getCurrentEnv().getAccessManager()
-                .checkTblPriv(ConnectContext.get(), dbTableName, PrivPredicate.SHOW)) {
+                .checkTblPriv(ConnectContext.get(),
+                        dbTableName.getCtl(),
+                        dbTableName.getDb(),
+                        dbTableName.getTbl(),
+                        PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
                     ConnectContext.get().getQualifiedUser(), ConnectContext.get().getRemoteIP(),
                     dbTableName.toString());
@@ -232,6 +248,7 @@ public class DescribeCommand extends Command implements ForwardWithSync {
                     procString += "/";
                     StringBuilder builder = new StringBuilder();
                     for (String str : partitionNames.getPartitionNames()) {
+                        // TODO: partition throw exception now
                         builder.append(str);
                         builder.append(",");
                     }
@@ -375,8 +392,8 @@ public class DescribeCommand extends Command implements ForwardWithSync {
         } finally {
             table.readUnlock();
         }
-        resultSet = new ShowResultSet(getMetaData(), rows);
-        executor.sendResultSet(resultSet);
+
+        return new ShowResultSet(getMetaData(), rows);
     }
 
     @Override

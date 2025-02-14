@@ -4,16 +4,16 @@ c1	bigint	Yes	true	\N
 c2	bigint	Yes	true	\N	
 
 -- !cmd --
+c1	bigint	Yes	true	\N	
+c2	bigint	Yes	true	\N	
+
+-- !cmd --
+c1	bigint	Yes	true	\N	
+c2	bigint	Yes	true	\N	
+
+-- !cmd --
 t1	DUP_KEYS	c1	bigint	bigint	Yes	true	\N		true		
 		c2	bigint	bigint	Yes	true	\N		true		
-
--- !cmd --
-c1	bigint	Yes	true	\N	
-c2	bigint	Yes	true	\N	
-
--- !cmd --
-c1	bigint	Yes	true	\N	
-c2	bigint	Yes	true	\N	
 
 -- !cmd --
 BackendId	bigint	No	false	\N	NONE

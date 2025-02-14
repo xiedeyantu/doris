@@ -138,6 +138,14 @@ public class TableNameInfo implements Writable {
     }
 
     /**
+     * set catalog name
+     * @param ctl new ctl name
+     */
+    public void setCtl(String ctl) {
+        this.ctl = ctl;
+    }
+
+    /**
      * get db name
      * @return dbName
      */
