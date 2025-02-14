@@ -210,7 +210,7 @@ public class DescribeCommand extends ShowCommand {
         }
 
         if (partitionNames != null) {
-            partitionNames.validate(ctx);
+            partitionNames.validate();
             if (partitionNames.isTemp()) {
                 throw new AnalysisException("Do not support temp partitions");
             }
@@ -248,7 +248,7 @@ public class DescribeCommand extends ShowCommand {
                     procString += "/";
                     StringBuilder builder = new StringBuilder();
                     for (String str : partitionNames.getPartitionNames()) {
-                        // TODO: partition throw exception now
+                        // TODO: describe tble partition p1 can not execute, should fix it.
                         builder.append(str);
                         builder.append(",");
                     }
