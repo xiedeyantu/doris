@@ -524,7 +524,8 @@ import org.apache.doris.nereids.trees.plans.commands.AlterTableCommand;
 import org.apache.doris.nereids.trees.plans.commands.AlterViewCommand;
 import org.apache.doris.nereids.trees.plans.commands.AlterWorkloadGroupCommand;
 import org.apache.doris.nereids.trees.plans.commands.AlterWorkloadPolicyCommand;
-import org.apache.doris.nereids.trees.plans.commands.AnalyzeCommand;
+import org.apache.doris.nereids.trees.plans.commands.AnalyzeDatabaseCommand;
+import org.apache.doris.nereids.trees.plans.commands.AnalyzeTableCommand;
 import org.apache.doris.nereids.trees.plans.commands.CallCommand;
 import org.apache.doris.nereids.trees.plans.commands.CancelExportCommand;
 import org.apache.doris.nereids.trees.plans.commands.CancelJobTaskCommand;
@@ -5803,9 +5804,9 @@ public class LogicalPlanBuilder extends DorisParserBaseVisitor<Object> {
         }
         propertiesMap.putAll(visitPropertyClause(ctx.propertyClause()));
         AnalyzeProperties properties = new AnalyzeProperties(propertiesMap);
-        AnalyzeTableOp analyzeDatabaseOp = new AnalyzeTableOp(tableNameInfo,
+        AnalyzeTableOp analyzeTableOp = new AnalyzeTableOp(tableNameInfo,
                 partitionNamesInfo, columnNames, properties);
-        return new AnalyzeCommand(analyzeDatabaseOp);
+        return new AnalyzeTableCommand(analyzeTableOp);
     }
 
     @Override
@@ -5833,7 +5834,7 @@ public class LogicalPlanBuilder extends DorisParserBaseVisitor<Object> {
         propertiesMap.putAll(visitPropertyClause(ctx.propertyClause()));
         AnalyzeProperties properties = new AnalyzeProperties(propertiesMap);
         AnalyzeDatabaseOp analyzeDatabaseOp = new AnalyzeDatabaseOp(ctlName, dbName, properties);
-        return new AnalyzeCommand(analyzeDatabaseOp);
+        return new AnalyzeDatabaseCommand(analyzeDatabaseOp);
     }
 
     @Override
